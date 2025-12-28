@@ -4,6 +4,9 @@ import yfinance as yf
 import time
 from datetime import datetime, timedelta
 
+# GDELT GKG THEMES
+
+
 # MARKET SYMBOLS
 
 BATCH_SYMBOLS = [
