@@ -3,6 +3,7 @@ import yfinance as yf
 #import pandas as pd
 import time
 from datetime import datetime, timedelta
+from db_utils import EventsDatabase
 
 # GDELT GKG EVENT THEMES
 
@@ -238,3 +239,23 @@ if __name__ == "__main__":
         symbol = tickerName["name"]
         curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt(symbol)
         print (symbol, curprc, twohrsprc, pricchng, percchng)
+
+        db = EventsDatabase('world_events.db')
+
+        if percchng != "None" and percchng > 0:
+            try:
+                event_id = db.add_event(
+                    event_type='financial_gain',
+                    title= symbol + ' Market Surge',
+                    # description='Tech stocks rally after positive earnings',
+                    lat = tickerName["position"][0],  
+                    lon = tickerName["position"][0],
+                    event_datetime = datetime.now(),
+                    amount=pricchng,  # Positive for gains
+                    # currency='USD',
+                    # category='stocks',
+                    # source='NYSE'
+                )
+                print(f"Financial event added with ID: {event_id}")
+            except Exception as e:
+                print(f"Error adding event: {e}")
