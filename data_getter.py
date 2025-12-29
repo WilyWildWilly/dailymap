@@ -77,21 +77,21 @@ WEAPONS_DEFENSE = [ # tested
 
 OIL_ENERGY = [ # tested
     # Global majors
-    "XOM",   # USA - Exxon
-    "CVX",   # USA - Chevron
-    "BP",    # UK - BP
-    "SHEL",  # UK/Netherlands - Shell
-    "TTE",   # France - TotalEnergies
+    {"name": "XOM", "position": [30.068842, -95.417203]},   # USA - Exxon - Spring Texas
+    # {"name": "CVX", "position": [29.650824, -95.299394]},   # USA - Chevron
+    {"name": "BP", "position": [51.480308, -0.101642]},    # UK - BP
+    # "SHEL",  # UK/Netherlands - Shell
+    {"name": "TTE", "position": [48.891025, 2.243065]},   # France - TotalEnergies
 
     # National oil companies (where traded)
-    "2222.SR", # Saudi Arabia - Saudi Aramco
-    "PBR",     # Brazil - Petrobras
-    "PKX",     # South Korea - POSCO
-    "CEO",     # China - CNOOC
+    {"name": "2222.SR", "position": [26.207381, 50.012410]}, # Saudi Arabia - Saudi Aramco
+    {"name": "PBR", "position": [-22.878367, -43.237309]},     # Brazil - Petrobras
+    {"name": "PKX", "position": [37.581088, 127.026997]},     # South Korea - POSCO
+    {"name": "CEO", "position": [39.92369, 116.42637]},     # China - CNOOC
     # DELISTED "OGDC.PK", # Pakistan - Oil & Gas Dev
-    "ENI.MI",  # Italy - ENI
-    "EQNR",    # Norway - Equinor
-    "YPF",     # Argentina - YPF
+    {"name": "ENI.MI", "position": [45.458280, 9.146134]},  # Italy - ENI
+    {"name": "EQNR", "position": [58.969383, 5.728082]},    # Norway - Equinor
+    {"name": "YPF", "position": [-34.652731, -58.416152]},     # Argentina - YPF
 ]
 
 NATIONAL_BANKS = [ # TESTED
@@ -232,9 +232,9 @@ def get_two_hour_change_alt(ticker_symbol):
     return current_price, price_two_hours_ago, price_change, percent_change
 
 if __name__ == "__main__":
-    # curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt("302132.SZ")
-    # print("BAESY", curprc, twohrsprc, pricchng, percchng)
-    for tickerName in WEAPONS_DEFENSE:
-        symbol = tickerName["name"]
-        curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt(symbol)
-        print (symbol, curprc, twohrsprc, pricchng, percchng)
+    curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt("OGDC.L")
+    print("ENI.MI", curprc, twohrsprc, pricchng, percchng)
+    # for tickerName in WEAPONS_DEFENSE:
+    #     symbol = tickerName["name"]
+    #     curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt(symbol)
+    #     print (symbol, curprc, twohrsprc, pricchng, percchng)
