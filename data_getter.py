@@ -242,7 +242,7 @@ if __name__ == "__main__":
 
         db = EventsDatabase('world_events.db')
 
-        if percchng != "None" and percchng > 0:
+        if percchng != "None" and type(percchng) == int and percchng > 0:
             try:
                 event_id = db.add_event(
                     event_type='financial_gain',
