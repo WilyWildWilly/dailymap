@@ -4,7 +4,7 @@ import yfinance as yf
 import time
 from datetime import datetime, timedelta
 
-# GDELT GKG THEMES
+# GDELT GKG EVENT THEMES
 
 
 # MARKET SYMBOLS
@@ -232,9 +232,9 @@ def get_two_hour_change_alt(ticker_symbol):
     return current_price, price_two_hours_ago, price_change, percent_change
 
 if __name__ == "__main__":
-    curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt("OGDC.L")
-    print("ENI.MI", curprc, twohrsprc, pricchng, percchng)
-    # for tickerName in WEAPONS_DEFENSE:
-    #     symbol = tickerName["name"]
-    #     curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt(symbol)
-    #     print (symbol, curprc, twohrsprc, pricchng, percchng)
+    # curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt("OGDC.L")
+    # print("ENI.MI", curprc, twohrsprc, pricchng, percchng)
+    for tickerName in WEAPONS_DEFENSE:
+        symbol = tickerName["name"]
+        curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt(symbol)
+        print (symbol, curprc, twohrsprc, pricchng, percchng)
