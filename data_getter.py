@@ -1,9 +1,12 @@
+import argparse
 import requests
+import json
 import yfinance as yf
-#import pandas as pd
+import pandas as pd
 import time
 from datetime import datetime, timedelta
 from db_utils import EventsDatabase
+from typing import List, Dict, Optional
 
 # GDELT GKG EVENT THEMES
 
