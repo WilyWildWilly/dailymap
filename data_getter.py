@@ -233,6 +233,12 @@ def get_two_hour_change_alt(ticker_symbol):
     return current_price, price_two_hours_ago, price_change, percent_change
 
 if __name__ == "__main__":
+
+    # initialize database 
+    db = EventsDatabase('world_events.db')
+
+    # 1: Query the markets
+
     # curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt("OGDC.L")
     # print("ENI.MI", curprc, twohrsprc, pricchng, percchng)
     for tickerName in WEAPONS_DEFENSE:
@@ -240,13 +246,12 @@ if __name__ == "__main__":
         curprc, twohrsprc, pricchng, percchng = get_two_hour_change_alt(symbol)
         print (symbol, curprc, twohrsprc, pricchng, percchng)
 
-        db = EventsDatabase('world_events.db')
-
-        if percchng != "None" and type(percchng) == int and percchng > 0:
+        if percchng != "None" and type(percchng) is int: 
+            financial_event_type = 'financial_gain' if percchng > 0 else 'financial_loss'
             try:
                 event_id = db.add_event(
-                    event_type='financial_gain',
-                    title= symbol + ' Market Surge',
+                    event_type=financial_event_type,
+                    title= symbol + financial_event_type,
                     # description='Tech stocks rally after positive earnings',
                     lat = tickerName["position"][0],  
                     lon = tickerName["position"][0],
