@@ -1,12 +1,509 @@
 #!/usr/bin/env python3
 
-import gdelt
+## Attempt 4
+
+#!/usr/bin/env python3
+"""
+GDELT Natural Disaster Monitor
+Searches for natural disaster events with geographic coordinates using GDELT API
+"""
+
+import requests
 import json
+import pandas as pd
+from datetime import datetime, timedelta
+import time
+from typing import List, Dict, Optional, Tuple
+import argparse
 
-gd= gdelt.gdelt(version=2)
-events = gd.Search(['2025 12 29 06 00','2025 12 29'],table='events',output='json',normcols=True,coverage=False)
+class GDELTDisasterMonitor:
+    def __init__(self, max_records: int = 100, timeout: int = 30):
+        """
+        Initialize the GDELT monitor
+        
+        Args:
+            max_records: Maximum number of records to retrieve per query
+            timeout: Request timeout in seconds
+        """
+        self.base_url = "https://api.gdeltproject.org/api/v2"
+        self.max_records = max_records
+        self.timeout = timeout
+        
+        # Define natural disaster categories and their keywords
+        self.disaster_categories = {
+            'earthquake': ['earthquake', 'seismic', 'tremor', 'quake', 'magnitude', 'epicenter', 'aftershock'],
+            'flood': ['flood', 'flooding', 'inundation', 'deluge', 'flash flood', 'river overflow'],
+            'storm': ['hurricane', 'typhoon', 'cyclone', 'storm', 'gale', 'tempest', 'monsoon'],
+            'wildfire': ['wildfire', 'bushfire', 'forest fire', 'wildland fire', 'brush fire', 'firestorm'],
+            'landslide': ['landslide', 'mudslide', 'rockslide', 'landslip', 'debris flow', 'avalanche'],
+            'tsunami': ['tsunami', 'tidal wave', 'seismic sea wave'],
+            'volcano': ['volcano', 'eruption', 'volcanic', 'lava', 'magma', 'ash cloud'],
+            'tornado': ['tornado', 'twister', 'funnel cloud'],
+            'drought': ['drought', 'water shortage', 'aridity', 'dry spell'],
+            'heatwave': ['heatwave', 'heat wave', 'extreme heat', 'heatstroke'],
+            'cold': ['cold snap', 'blizzard', 'snowstorm', 'ice storm', 'freeze', 'frost'],
+            'other': ['natural disaster', 'catastrophe', 'calamity', 'cataclysm']
+        }
+    
+    def get_geo_events(self, event_type: str = None, hours: int = 2, 
+                       location: Tuple[float, float] = None, radius_km: int = None) -> Dict:
+        """
+        Get natural disaster events with geographic coordinates using GDELT Geo API
+        
+        Args:
+            event_type: Specific disaster type or None for all natural disasters
+            hours: Number of hours to look back
+            location: Tuple of (latitude, longitude) for center point
+            radius_km: Search radius in kilometers
+        
+        Returns:
+            Dictionary with event data including coordinates
+        """
+        url = f"{self.base_url}/geo/geo"
+        
+        # Build query based on event type
+        if event_type and event_type in self.disaster_categories:
+            # Use specific disaster type
+            query_keywords = self.disaster_categories[event_type]
+            query = f'({" OR ".join(query_keywords)})'
+        elif event_type:
+            # Use custom event type
+            query = event_type
+        else:
+            # Combine all disaster categories
+            all_keywords = []
+            for keywords in self.disaster_categories.values():
+                all_keywords.extend(keywords[:3])  # Take top 3 keywords from each category
+            query = f'({" OR ".join(all_keywords)})'
+        
+        # Add severity/impact keywords
+        query += " (death OR fatal OR casualties OR damage OR destroyed OR emergency OR evacuation)"
+        
+        params = {
+            "query": query,
+            "mode": "pointdata",  # Returns points with coordinates
+            "format": "json",
+            "timespan": f"{hours}h",
+            "maxpoints": self.max_records
+        }
+        
+        # Add location filter if specified
+        if location and radius_km:
+            params["location"] = f"{location[0]},{location[1]}"
+            params["radius"] = f"{radius_km}km"
+        
+        print(f"Querying GDELT Geo API with: {query}")
+        print(f"Time range: Last {hours} hours")
+        if location:
+            print(f"Location: {location}, Radius: {radius_km}km")
+        
+        try:
+            response = requests.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            
+            data = response.json()
+            return self._process_geo_data(data, event_type)
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error querying GDELT API: {e}")
+            return {"error": str(e), "points": []}
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response: {e}")
+            return {"error": "Invalid JSON response", "points": []}
+    
+    def _process_geo_data(self, data: Dict, event_type: str = None) -> Dict:
+        """
+        Process raw geo data into structured format
+        
+        Args:
+            data: Raw JSON response from GDELT Geo API
+            event_type: The type of disaster searched for
+        
+        Returns:
+            Processed data dictionary
+        """
+        processed_data = {
+            "metadata": {
+                "query_time": datetime.now().isoformat(),
+                "total_points": len(data.get("points", [])),
+                "event_type": event_type or "all natural disasters"
+            },
+            "points": []
+        }
+        
+        for point in data.get("points", []):
+            # Extract coordinates
+            coordinates = point.get("coordinates", {})
+            lat = coordinates.get("lat")
+            lon = coordinates.get("lng")
+            
+            if lat is None or lon is None:
+                continue  # Skip points without coordinates
+            
+            # Determine event type from keywords
+            point_event_type = self._categorize_point(point)
+            
+            # Extract relevant information
+            processed_point = {
+                "latitude": lat,
+                "longitude": lon,
+                "event_type": point_event_type,
+                "num_articles": point.get("numarticles", 0),
+                "avg_tone": point.get("avgtone", 0),
+                "urls": point.get("urls", []),
+                "title": point.get("title", ""),
+                "location_name": point.get("locationname", ""),
+                "country_code": point.get("countrycode", ""),
+                "adm1_code": point.get("adm1code", ""),  # State/Province code
+                "confidence": point.get("confidence", 0),
+                "date_added": point.get("dateadded", "")
+            }
+            
+            # Add keywords if available
+            if "keywords" in point:
+                processed_point["keywords"] = point.get("keywords", [])
+            
+            processed_data["points"].append(processed_point)
+        
+        return processed_data
+    
+    def _categorize_point(self, point: Dict) -> str:
+        """
+        Categorize a point into specific disaster type based on keywords
+        
+        Args:
+            point: Geo point data from GDELT
+        
+        Returns:
+            Disaster category string
+        """
+        # Check title and keywords
+        search_text = ""
+        if "title" in point:
+            search_text += point["title"].lower() + " "
+        if "keywords" in point:
+            search_text += " ".join(point["keywords"]).lower() + " "
+        
+        # Check each category
+        for category, keywords in self.disaster_categories.items():
+            for keyword in keywords:
+                if keyword in search_text:
+                    return category
+        
+        return "other"
+    
+    def get_articles_for_event(self, event_type: str, hours: int = 2) -> List[Dict]:
+        """
+        Get detailed articles for a specific event type using Document API
+        
+        Args:
+            event_type: Type of disaster to search for
+            hours: Hours to look back
+        
+        Returns:
+            List of article dictionaries
+        """
+        url = f"{self.base_url}/doc/doc"
+        
+        if event_type in self.disaster_categories:
+            keywords = self.disaster_categories[event_type]
+            query = f'({" OR ".join(keywords)})'
+        else:
+            query = event_type
+        
+        params = {
+            "query": f'{query} (death OR fatal OR casualties OR emergency)',
+            "mode": "artlist",
+            "format": "json",
+            "maxrecords": min(self.max_records, 250),  # Document API max is 250
+            "timespan": f"{hours}h",
+            "sort": "datedesc"
+        }
+        
+        try:
+            response = requests.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            
+            data = response.json()
+            return data.get("articles", [])
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error querying Document API: {e}")
+            return []
+    
+    def search_by_time_range(self, start_time: str, end_time: str, 
+                            event_type: str = None) -> Dict:
+        """
+        Search for events in a specific time range
+        
+        Args:
+            start_time: Start time in format YYYYMMDDHHMMSS
+            end_time: End time in format YYYYMMDDHHMMSS
+            event_type: Optional specific disaster type
+        
+        Returns:
+            Dictionary with events in the time range
+        """
+        timespan = f"{start_time}-{end_time}"
+        
+        url = f"{self.base_url}/geo/geo"
+        
+        if event_type and event_type in self.disaster_categories:
+            keywords = self.disaster_categories[event_type]
+            query = f'({" OR ".join(keywords)})'
+        else:
+            query = " OR ".join([k for keywords in self.disaster_categories.values() 
+                               for k in keywords[:2]])
+        
+        query += " (emergency OR disaster OR casualties)"
+        
+        params = {
+            "query": query,
+            "mode": "pointdata",
+            "format": "json",
+            "timespan": timespan,
+            "maxpoints": self.max_records
+        }
+        
+        try:
+            response = requests.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            
+            data = response.json()
+            return self._process_geo_data(data, event_type)
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error querying API: {e}")
+            return {"error": str(e), "points": []}
+    
+    def export_to_csv(self, data: Dict, filename: str = "gdelt_disasters.csv"):
+        """
+        Export event data to CSV file
+        
+        Args:
+            data: Processed event data dictionary
+            filename: Output CSV filename
+        """
+        if "points" not in data or not data["points"]:
+            print("No data to export")
+            return
+        
+        df = pd.DataFrame(data["points"])
+        
+        # Reorder columns for better readability
+        column_order = [
+            'event_type', 'title', 'location_name', 'country_code',
+            'latitude', 'longitude', 'num_articles', 'avg_tone',
+            'date_added', 'confidence', 'urls'
+        ]
+        
+        # Only include columns that exist
+        existing_columns = [col for col in column_order if col in df.columns]
+        other_columns = [col for col in df.columns if col not in column_order]
+        
+        df = df[existing_columns + other_columns]
+        df.to_csv(filename, index=False, encoding='utf-8')
+        print(f"Exported {len(df)} events to {filename}")
+    
+    def print_summary(self, data: Dict):
+        """
+        Print a summary of the event data
+        
+        Args:
+            data: Processed event data dictionary
+        """
+        if "points" not in data:
+            print("No data available")
+            return
+        
+        points = data["points"]
+        metadata = data.get("metadata", {})
+        
+        print("\n" + "="*80)
+        print("GDELT NATURAL DISASTER MONITOR - SUMMARY")
+        print("="*80)
+        
+        print(f"\nQuery Time: {metadata.get('query_time', 'N/A')}")
+        print(f"Event Type: {metadata.get('event_type', 'N/A')}")
+        print(f"Total Events Found: {len(points)}")
+        
+        if not points:
+            print("\nNo events found in the specified time period.")
+            return
+        
+        # Count by event type
+        event_counts = {}
+        for point in points:
+            event_type = point.get("event_type", "unknown")
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+        
+        print("\nEvents by Type:")
+        for event_type, count in sorted(event_counts.items(), key=lambda x: x[1], reverse=True):
+            print(f"  {event_type}: {count}")
+        
+        # Most reported events
+        print(f"\nTop 5 Most Reported Events:")
+        sorted_points = sorted(points, key=lambda x: x.get("num_articles", 0), reverse=True)
+        for i, point in enumerate(sorted_points[:5], 1):
+            print(f"\n{i}. {point.get('event_type', 'Unknown').upper()}")
+            print(f"   Location: {point.get('location_name', 'Unknown')} "
+                  f"({point.get('latitude', 'N/A')}, {point.get('longitude', 'N/A')})")
+            print(f"   Articles: {point.get('num_articles', 0)}, "
+                  f"Avg Tone: {point.get('avg_tone', 0):.2f}")
+            if point.get('title'):
+                print(f"   Title: {point.get('title', '')[:80]}...")
+        
+        # Geographic distribution
+        countries = {}
+        for point in points:
+            country = point.get("country_code", "Unknown")
+            if country:
+                countries[country] = countries.get(country, 0) + 1
+        
+        if len(countries) > 0:
+            print(f"\nGeographic Distribution ({len(countries)} countries/regions):")
+            for country, count in sorted(countries.items(), key=lambda x: x[1], reverse=True)[:10]:
+                print(f"  {country}: {count}")
+        
+        print("\n" + "="*80)
 
-events.info()
+def main():
+    """Main function with command line interface"""
+    parser = argparse.ArgumentParser(description="Monitor natural disasters using GDELT API")
+    parser.add_argument("--hours", type=int, default=2, help="Hours to look back (default: 2)")
+    parser.add_argument("--type", type=str, help="Specific disaster type (e.g., earthquake, flood)")
+    parser.add_argument("--location", type=str, help="Center location as lat,lon (e.g., 35.68,139.76)")
+    parser.add_argument("--radius", type=int, help="Search radius in kilometers")
+    parser.add_argument("--export", type=str, help="Export to CSV filename")
+    parser.add_argument("--list-types", action="store_true", help="List available disaster types")
+    
+    args = parser.parse_args()
+    
+    monitor = GDELTDisasterMonitor(max_records=100)
+    
+    if args.list_types:
+        print("Available disaster types:")
+        for category in monitor.disaster_categories.keys():
+            print(f"  - {category}")
+        return
+    
+    # Parse location if provided
+    location_tuple = None
+    if args.location:
+        try:
+            lat, lon = map(float, args.location.split(','))
+            location_tuple = (lat, lon)
+        except ValueError:
+            print(f"Invalid location format: {args.location}. Use 'lat,lon'")
+            return
+    
+    # Get events
+    print("Fetching natural disaster events from GDELT...")
+    
+    if location_tuple and args.radius:
+        data = monitor.get_geo_events(
+            event_type=args.type,
+            hours=args.hours,
+            location=location_tuple,
+            radius_km=args.radius
+        )
+    else:
+        data = monitor.get_geo_events(
+            event_type=args.type,
+            hours=args.hours
+        )
+    
+    # Print summary
+    monitor.print_summary(data)
+    
+    # Export if requested
+    if args.export and "points" in data and data["points"]:
+        monitor.export_to_csv(data, args.export)
+    
+    # Example of getting detailed articles for the most common event type
+    if "points" in data and data["points"]:
+        # Find most common event type
+        event_types = [p.get("event_type") for p in data["points"]]
+        if event_types:
+            from collections import Counter
+            most_common = Counter(event_types).most_common(1)[0][0]
+            print(f"\nGetting detailed articles for {most_common} events...")
+            articles = monitor.get_articles_for_event(most_common, hours=args.hours)
+            print(f"Found {len(articles)} articles about {most_common}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+## Attempt 3
+
+# import os
+# from google.cloud import bigquery
+
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '/Users/gchela/.config/gcloud/application_default_credentials.json'
+
+# client = bigquery.Client()
+
+# query = """
+# SELECT 
+#     SQLDate,
+#     DATEADDED,
+#     SOURCEURL,
+#     ActionGeo_CountryCode,
+#     ActionGeo_Lat,
+#     ActionGeo_Long,
+#     Actor1Name,
+#     Actor2Name,
+#     EventCode,
+#     EventBaseCode,
+#     EventRootCode,
+#     GoldsteinScale,
+#     NumArticles,
+#     AvgTone
+# FROM `gdelt-bq.gdeltv2.events`
+# WHERE 
+#     -- Date filter (using a real past date)
+#     SQLDATE >= 20251229090000 AND SQLDATE <= 20251229110000
+#     -- Natural disaster event codes (Root code 17)
+#     AND EventRootCode = '17'
+#     -- Filter for deadly/disastrous events
+#     AND (
+#         EventCode IN ('171', '172', '173', '174') OR
+#         Actor1Name LIKE '%earthquake%' OR
+#         Actor1Name LIKE '%tsunami%' OR
+#         Actor1Name LIKE '%flood%' OR
+#         Actor1Name LIKE '%hurricane%' OR
+#         Actor1Name LIKE '%tornado%' OR
+#         Actor1Name LIKE '%volcano%' OR
+#         Actor1Name LIKE '%wildfire%'
+#     )
+#     -- Filter for negative/impactful events
+#     AND AvgTone < -2.0
+# ORDER BY NumArticles DESC
+# LIMIT 50
+# """
+
+# query_job = client.query(query)
+# results = query_job.result()
+
+# for row in results:
+#     print(f"Date: {row.SQLDate}, Event: {row.EventCode}, Articles: {row.NumArticles}")
+
+## Attempt 2
+
+# import gdelt
+# import json
+
+# gd= gdelt.gdelt(version=2)
+# events = gd.Search(['2025 12 29','2025 12 29'],table='events',output='json',normcols=True,coverage=False)
+
+# events.info()
+
+
+## Attempt 1
+
 # """
 # GDELT Event Database Query Script for Natural Disaster Events
 # Queries events from the last 8 hours for specified disaster themes
