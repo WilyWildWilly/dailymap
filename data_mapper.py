@@ -19,8 +19,9 @@ def dataToMap():
         # Fixed SQL query - removed the CREATE TABLE syntax from SELECT
         cursor.execute('''
             SELECT * FROM events 
-            WHERE timestamp BETWEEN ? AND ?
+            WHERE datetime BETWEEN ? AND ?
         ''', (queryStartTime, queryEndTime))
+            
         
         all_events = cursor.fetchall()
         
@@ -33,9 +34,6 @@ def dataToMap():
     
     return all_events
 
-
-# if __name__ == "__main__":
-#     dataToMap()
 
 import sqlite3
 
@@ -68,5 +66,8 @@ def list_tables():
         
         cursor.close()
 
+
 if __name__ == "__main__":
-    list_tables()
+    dataToMap()
+# if __name__ == "__main__":
+#     list_tables()
